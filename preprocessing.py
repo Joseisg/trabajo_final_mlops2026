@@ -21,9 +21,44 @@ def load_data() -> pd.DataFrame:
         config.DATA_PATH,
         sep=config.DATA_SEPARATOR,
         encoding=config.DATA_ENCODING,
+        low_memory=False,
     )
     print(f"[INFO] Dataset cargado: {df.shape[0]} filas, {df.shape[1]} columnas")
     print(f"[INFO] Columnas disponibles: {list(df.columns)}")
+    return df
+
+
+def create_derived_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Crea features derivadas para mejorar la capacidad predictiva."""
+    df["antiguedad"] = 2026 - df["año"]
+    df["km_por_ano"] = df["kilometraje"] / df["antiguedad"].clip(lower=1)
+    df["log_km"] = np.log1p(df["kilometraje"])
+    print("[INFO] Features derivadas creadas: antiguedad, km_por_ano, log_km")
+    return df
+
+
+def transform_raw_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Transforma columnas crudas del CSV al formato esperado por el pipeline."""
+    # Renombrar kilometros → kilometraje
+    if "kilometros" in df.columns and "kilometraje" not in df.columns:
+        df = df.rename(columns={"kilometros": "kilometraje"})
+        # Parsear string "45.000 km" → 45000
+        df["kilometraje"] = (
+            df["kilometraje"]
+            .astype(str)
+            .str.replace(" km", "", regex=False)
+            .str.replace(".", "", regex=False)
+            .pipe(pd.to_numeric, errors="coerce")
+        )
+        print(f"[INFO] Columna 'kilometros' transformada a 'kilometraje' (numérico)")
+
+    # Asegurar que precio sea numérico
+    df["precio"] = pd.to_numeric(df["precio"], errors="coerce")
+
+    # Asegurar que año sea numérico
+    if "año" in df.columns:
+        df["año"] = pd.to_numeric(df["año"], errors="coerce")
+
     return df
 
 
@@ -141,15 +176,6 @@ def save_encoders(encoders: dict, feature_names: list):
     print(f"[INFO] Feature names guardados en: {config.FEATURE_NAMES_PATH}")
 
 
-def load_encoders() -> tuple[dict, list]:
-    """Carga encoders y feature names guardados."""
-    with open(config.ENCODERS_OUTPUT_PATH, "rb") as f:
-        encoders = pickle.load(f)
-    with open(config.FEATURE_NAMES_PATH, "rb") as f:
-        feature_names = pickle.load(f)
-    return encoders, feature_names
-
-
 def run_preprocessing_pipeline() -> tuple[pd.DataFrame, dict]:
     """
     Pipeline completo de preprocesamiento.
@@ -158,6 +184,8 @@ def run_preprocessing_pipeline() -> tuple[pd.DataFrame, dict]:
         (df_limpio_y_encoded, encoders)
     """
     df = load_data()
+    df = transform_raw_columns(df)
+    df = create_derived_features(df)
 
     print("\n" + "=" * 60)
     print("EXPLORACIÓN INICIAL")

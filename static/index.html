@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cotizador de Autos</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 480px;
+        }
+        h1 {
+            font-size: 1.6rem;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 28px;
+            font-size: 0.9rem;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+        }
+        select, input[type="number"] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-bottom: 18px;
+            transition: border-color 0.2s;
+            background: #fafafa;
+            appearance: auto;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #4361ee;
+            background: #fff;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #4361ee;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #3a56d4; }
+        button:disabled { background: #a0a0a0; cursor: not-allowed; }
+        .result {
+            display: none;
+            margin-top: 24px;
+            padding: 24px;
+            background: linear-gradient(135deg, #4361ee 0%, #3a56d4 100%);
+            border-radius: 12px;
+            color: #fff;
+            text-align: center;
+        }
+        .result.show { display: block; }
+        .price-main {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 8px 0;
+        }
+        .price-label {
+            font-size: 0.85rem;
+            opacity: 0.85;
+        }
+        .range {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.25);
+        }
+        .range-item {
+            text-align: center;
+        }
+        .range-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .range-label {
+            font-size: 0.75rem;
+            opacity: 0.8;
+            margin-top: 2px;
+        }
+        .error {
+            display: none;
+            margin-top: 16px;
+            padding: 12px;
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 8px;
+            color: #c33;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        .error.show { display: block; }
+        .loading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cotizador de Autos</h1>
+        <p class="subtitle">Estima el precio de mercado de tu vehiculo</p>
+
+        <form id="form">
+            <label for="marca">Marca</label>
+            <select id="marca" required>
+                <option value="">Selecciona una marca</option>
+            </select>
+
+            <label for="modelo">Modelo</label>
+            <select id="modelo" required disabled>
+                <option value="">Primero selecciona una marca</option>
+            </select>
+
+            <label for="ano">Ano</label>
+            <input type="number" id="ano" min="1990" max="2026" placeholder="Ej: 2019" required>
+
+            <label for="km">Kilometraje</label>
+            <input type="number" id="km" min="0" max="500000" placeholder="Ej: 45000" required>
+
+            <button type="submit" id="btn">Cotizar</button>
+        </form>
+
+        <div class="result" id="result">
+            <div class="price-label">Precio estimado</div>
+            <div class="price-main" id="precio"></div>
+            <div class="range">
+                <div class="range-item">
+                    <div class="range-value" id="rango-bajo"></div>
+                    <div class="range-label">Rango bajo</div>
+                </div>
+                <div class="range-item">
+                    <div class="range-value" id="rango-alto"></div>
+                    <div class="range-label">Rango alto</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="error" id="error"></div>
+    </div>
+
+    <script>
+        let marcaModelos = {};
+        let defaultsModelos = {};
+
+        function formatCLP(n) {
+            return '$' + n.toLocaleString('es-CL');
+        }
+
+        async function init() {
+            try {
+                const [mmRes, defRes] = await Promise.all([
+                    fetch('/api/marca-modelos'),
+                    fetch('/api/defaults-modelos')
+                ]);
+                marcaModelos = await mmRes.json();
+                defaultsModelos = await defRes.json();
+
+                const marcaSelect = document.getElementById('marca');
+                Object.keys(marcaModelos).sort().forEach(marca => {
+                    const opt = document.createElement('option');
+                    opt.value = marca;
+                    opt.textContent = marca;
+                    marcaSelect.appendChild(opt);
+                });
+            } catch (e) {
+                showError('Error al cargar datos. Verifica que la API este corriendo.');
+            }
+        }
+
+        document.getElementById('marca').addEventListener('change', function() {
+            const modeloSelect = document.getElementById('modelo');
+            modeloSelect.innerHTML = '';
+
+            if (!this.value) {
+                modeloSelect.innerHTML = '<option value="">Primero selecciona una marca</option>';
+                modeloSelect.disabled = true;
+                return;
+            }
+
+            modeloSelect.disabled = false;
+            modeloSelect.innerHTML = '<option value="">Selecciona un modelo</option>';
+
+            const modelos = marcaModelos[this.value] || [];
+            modelos.forEach(modelo => {
+                const opt = document.createElement('option');
+                opt.value = modelo;
+                opt.textContent = modelo;
+                modeloSelect.appendChild(opt);
+            });
+        });
+
+        document.getElementById('form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn');
+            const resultDiv = document.getElementById('result');
+            const errorDiv = document.getElementById('error');
+
+            resultDiv.classList.remove('show');
+            errorDiv.classList.remove('show');
+
+            const marca = document.getElementById('marca').value;
+            const modelo = document.getElementById('modelo').value;
+            const ano = parseInt(document.getElementById('ano').value);
+            const km = parseInt(document.getElementById('km').value);
+
+            if (!marca || !modelo || !ano || isNaN(km)) {
+                showError('Completa todos los campos.');
+                return;
+            }
+
+            const key = marca + '|' + modelo;
+            const defaults = defaultsModelos[key] || {
+                tipo_de_combustible: 'Bencina',
+                transmision: 'Automática',
+                tipo_de_carroceria: 'SUV'
+            };
+
+            const body = {
+                marca: marca,
+                modelo: modelo,
+                "año": ano,
+                kilometraje: km,
+                tipo_de_combustible: defaults.tipo_de_combustible,
+                transmision: defaults.transmision,
+                tipo_de_carroceria: defaults.tipo_de_carroceria
+            };
+
+            btn.disabled = true;
+            btn.textContent = 'Cotizando...';
+
+            try {
+                const res = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Error en la prediccion');
+                }
+
+                const data = await res.json();
+                document.getElementById('precio').textContent = formatCLP(data.precio_estimado);
+                document.getElementById('rango-bajo').textContent = formatCLP(data.rango_bajo);
+                document.getElementById('rango-alto').textContent = formatCLP(data.rango_alto);
+                resultDiv.classList.add('show');
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Cotizar';
+            }
+        });
+
+        function showError(msg) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = msg;
+            errorDiv.classList.add('show');
+        }
+
+        init();
+    </script>
+</body>
+</html>

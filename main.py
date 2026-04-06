@@ -8,20 +8,23 @@ FastAPI + Uvicorn para servir el modelo de predicción.
 
 import pickle
 import os
+import json
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from typing import Optional
+import config
 
 # =============================================================================
 # Cargar configuración
 # =============================================================================
 # Paths relativos al directorio de la app
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "..", "model", "model.pkl")
-ENCODERS_PATH = os.path.join(BASE_DIR, "..", "model", "label_encoders.pkl")
-FEATURES_PATH = os.path.join(BASE_DIR, "..", "model", "feature_names.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "model", "model.pkl")
+ENCODERS_PATH = os.path.join(BASE_DIR, "model", "label_encoders.pkl")
+FEATURES_PATH = os.path.join(BASE_DIR, "model", "feature_names.pkl")
 
 # =============================================================================
 # Cargar modelo y artefactos al iniciar la app
@@ -44,36 +47,24 @@ print(f"[OK] Features: {feature_names}")
 # Definir la app FastAPI
 # =============================================================================
 app = FastAPI(
-    title="Predictor de Precios de Automóviles",
-    description=(
-        "API para estimar el precio de mercado de un automóvil usado. "
-        "Permite detectar oportunidades de compra/venta comparando "
-        "el precio publicado contra la estimación del modelo."
-    ),
-    version="1.0.0",
+    title=config.API_TITLE,
+    description=config.API_DESCRIPTION,
+    version=config.API_VERSION,
 )
 
 
 # =============================================================================
 # Esquemas de entrada y salida (Pydantic)
 # =============================================================================
-# ⚠️  ADAPTAR estos campos a las columnas reales del dataset
 class CarFeatures(BaseModel):
-    """
-    Features del automóvil para predicción.
-    Adaptar los campos según las columnas del dataset final.
-    """
+    """Features del automóvil para predicción."""
     marca: str = Field(..., example="Toyota", description="Marca del vehículo")
     modelo: str = Field(..., example="Corolla", description="Modelo del vehículo")
     año: int = Field(..., example=2019, ge=1990, le=2026, description="Año del vehículo")
     kilometraje: int = Field(..., example=45000, ge=0, description="Kilometraje en km")
-    # ---------------------------------------------------------------
-    # Descomentar y adaptar según las features del dataset:
-    # combustible: str = Field(..., example="Bencina")
-    # transmision: str = Field(..., example="Automática")
-    # tipo_vehiculo: str = Field(..., example="Sedán")
-    # region: str = Field(..., example="Metropolitana")
-    # ---------------------------------------------------------------
+    tipo_de_combustible: str = Field(..., example="Bencina", description="Tipo de combustible")
+    transmision: str = Field(..., example="Automática", description="Tipo de transmisión")
+    tipo_de_carroceria: str = Field(..., example="Sedán", description="Tipo de carrocería")
 
     class Config:
         json_schema_extra = {
@@ -82,6 +73,9 @@ class CarFeatures(BaseModel):
                 "modelo": "Corolla",
                 "año": 2019,
                 "kilometraje": 45000,
+                "tipo_de_combustible": "Bencina",
+                "transmision": "Automática",
+                "tipo_de_carroceria": "Sedán",
             }
         }
 
@@ -100,10 +94,10 @@ class OpportunityRequest(BaseModel):
     modelo: str = Field(..., example="Corolla")
     año: int = Field(..., example=2019)
     kilometraje: int = Field(..., example=45000)
+    tipo_de_combustible: str = Field(..., example="Bencina")
+    transmision: str = Field(..., example="Automática")
+    tipo_de_carroceria: str = Field(..., example="Sedán")
     precio_publicado: int = Field(..., example=10500000, description="Precio al que está publicado")
-    # Descomentar según dataset:
-    # combustible: str = Field(None, example="Bencina")
-    # transmision: str = Field(None, example="Automática")
 
 
 class OpportunityResponse(BaseModel):
@@ -127,6 +121,11 @@ def predict_price(features: dict) -> float:
     # Crear DataFrame con una fila
     df = pd.DataFrame([features])
 
+    # Calcular features derivadas
+    df["antiguedad"] = 2026 - df["año"]
+    df["km_por_ano"] = df["kilometraje"] / df["antiguedad"].clip(lower=1)
+    df["log_km"] = np.log1p(df["kilometraje"])
+
     # Aplicar Label Encoding a las categóricas
     for col, encoder in label_encoders.items():
         if col in df.columns:
@@ -144,14 +143,37 @@ def predict_price(features: dict) -> float:
     # Asegurar que las columnas estén en el orden correcto
     df = df[feature_names]
 
-    # Predecir
-    prediction = model.predict(df)[0]
+    # Predecir (modelo entrenado en log-scale, reconvertir)
+    prediction_log = model.predict(df)[0]
+    prediction = np.expm1(prediction_log)
     return max(prediction, 0)  # No permitir precios negativos
 
 
 # =============================================================================
 # Endpoints
 # =============================================================================
+@app.get("/")
+def serve_frontend():
+    """Sirve el frontend del cotizador."""
+    return FileResponse(os.path.join(BASE_DIR, "static", "index.html"))
+
+
+@app.get("/api/marca-modelos")
+def get_marca_modelos():
+    """Retorna el mapeo marca → modelos para los dropdowns."""
+    filepath = os.path.join(BASE_DIR, "marca_modelos.json")
+    with open(filepath, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.get("/api/defaults-modelos")
+def get_defaults_modelos():
+    """Retorna defaults de combustible/transmisión/carrocería por marca+modelo."""
+    filepath = os.path.join(BASE_DIR, "defaults_modelos.json")
+    with open(filepath, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 @app.get("/health")
 def health_check():
     """Verifica que la API y el modelo estén funcionando."""
@@ -229,3 +251,7 @@ def evaluate_opportunity(request: OpportunityRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en evaluación: {str(e)}")
+
+
+# Montar archivos estáticos (debe ir AL FINAL, después de todas las rutas)
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")

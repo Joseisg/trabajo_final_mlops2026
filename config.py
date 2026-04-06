@@ -10,7 +10,7 @@ Modificar SOLO este archivo para adaptar el modelo a tu dataset.
 # =============================================================================
 # 1. DATASET
 # =============================================================================
-DATA_PATH = "data/autos.csv"           # Ruta al archivo CSV
+DATA_PATH = "ml_raw_detalle.csv"       # Ruta al archivo CSV
 DATA_SEPARATOR = ","                    # Separador del CSV ("," o ";")
 DATA_ENCODING = "utf-8"                # Encoding del CSV ("utf-8", "latin-1", etc.)
 
@@ -26,20 +26,18 @@ TARGET_COL = "precio"                   # Nombre de la columna de precio
 NUMERIC_FEATURES = [
     "año",
     "kilometraje",
-    # "cilindrada",
-    # "puertas",
-    # Agregar más features numéricas aquí
+    "antiguedad",
+    "km_por_ano",
+    "log_km",
 ]
 
 # Features categóricas (marca, modelo, combustible, transmisión, etc.)
 CATEGORICAL_FEATURES = [
     "marca",
     "modelo",
-    # "combustible",
-    # "transmision",
-    # "tipo_vehiculo",
-    # "region",
-    # Agregar más features categóricas aquí
+    "tipo_de_combustible",
+    "transmision",
+    "tipo_de_carroceria",
 ]
 
 # Lista completa de features (se genera automáticamente)
@@ -82,6 +80,9 @@ LGBM_PARAMS = {
     "random_state": 42,
     "verbose": -1,
     "n_jobs": -1,
+    # Restricciones monótonas: año(+), km(-), antiguedad(-), km_por_ano(-), log_km(-), resto(0)
+    # Orden: año, kilometraje, antiguedad, km_por_ano, log_km, marca, modelo, combustible, transmision, carroceria
+    "monotone_constraints": [1, -1, -1, -1, -1, 0, 0, 0, 0, 0],
 }
 
 # Early stopping

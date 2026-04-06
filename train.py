@@ -71,33 +71,18 @@ def train_model(
     return model
 
 
-def evaluate_model(
-    model: lgb.LGBMRegressor,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
-) -> dict:
-    """
-    Evalúa el modelo con múltiples métricas.
-
-    Métricas:
-        - MAE:  Error Absoluto Medio (en la misma unidad que el precio)
-        - RMSE: Raíz del Error Cuadrático Medio
-        - MAPE: Error Porcentual Absoluto Medio (% de error promedio)
-        - R²:   Coeficiente de Determinación (qué tan bien explica la varianza)
-        - Median AE: Error Absoluto Mediano (robusto a outliers)
-    """
-    y_pred = model.predict(X_test)
-
+def evaluate_model_from_predictions(y_real: np.ndarray, y_pred: np.ndarray) -> dict:
+    """Evalúa métricas a partir de arrays de valores reales y predichos."""
     metrics = {
-        "MAE": mean_absolute_error(y_test, y_pred),
-        "RMSE": np.sqrt(mean_squared_error(y_test, y_pred)),
-        "MAPE": mean_absolute_percentage_error(y_test, y_pred) * 100,
-        "R2": r2_score(y_test, y_pred),
-        "Median_AE": np.median(np.abs(y_test - y_pred)),
+        "MAE": mean_absolute_error(y_real, y_pred),
+        "RMSE": np.sqrt(mean_squared_error(y_real, y_pred)),
+        "MAPE": mean_absolute_percentage_error(y_real, y_pred) * 100,
+        "R2": r2_score(y_real, y_pred),
+        "Median_AE": np.median(np.abs(y_real - y_pred)),
     }
 
     print("\n" + "=" * 60)
-    print("MÉTRICAS DE EVALUACIÓN")
+    print("MÉTRICAS DE EVALUACIÓN (escala original CLP)")
     print("=" * 60)
     print(f"  MAE  (Error Absoluto Medio):        ${metrics['MAE']:,.0f}")
     print(f"  RMSE (Raíz Error Cuadrático Medio):  ${metrics['RMSE']:,.0f}")
@@ -108,22 +93,40 @@ def evaluate_model(
     print("\n" + "-" * 60)
     print("INTERPRETACIÓN:")
     if metrics["R2"] >= 0.90:
-        print("  ✅ R² >= 0.90: El modelo explica muy bien la variabilidad del precio.")
+        print("  R² >= 0.90: El modelo explica muy bien la variabilidad del precio.")
     elif metrics["R2"] >= 0.80:
-        print("  ✅ R² >= 0.80: Buen modelo, explica la mayoría de la variabilidad.")
+        print("  R² >= 0.80: Buen modelo, explica la mayoría de la variabilidad.")
     elif metrics["R2"] >= 0.70:
-        print("  ⚠️  R² >= 0.70: Modelo aceptable, hay margen de mejora.")
+        print("  R² >= 0.70: Modelo aceptable, hay margen de mejora.")
     else:
-        print("  ❌ R² < 0.70: Modelo débil. Revisar features o datos.")
+        print("  R² < 0.70: Modelo débil. Revisar features o datos.")
 
     if metrics["MAPE"] <= 10:
-        print("  ✅ MAPE <= 10%: Predicciones muy precisas en promedio.")
+        print("  MAPE <= 10%: Predicciones muy precisas en promedio.")
     elif metrics["MAPE"] <= 20:
-        print("  ✅ MAPE <= 20%: Precisión aceptable para precios de autos.")
+        print("  MAPE <= 20%: Precisión aceptable para precios de autos.")
     else:
-        print("  ⚠️  MAPE > 20%: Error promedio alto, considerar más features.")
+        print("  MAPE > 20%: Error promedio alto, considerar más features.")
 
     return metrics
+
+
+def analyze_predictions_from_arrays(y_real: np.ndarray, y_pred: np.ndarray, n_samples: int = 10):
+    """Muestra ejemplos de predicciones vs valores reales."""
+    print("\n" + "=" * 60)
+    print(f"EJEMPLOS DE PREDICCIONES (primeras {n_samples})")
+    print("=" * 60)
+    print(f"  {'Real':>15s} | {'Predicho':>15s} | {'Diferencia':>15s} | {'Error %':>8s}")
+    print("  " + "-" * 62)
+
+    indices = np.random.RandomState(42).choice(len(y_real), size=min(n_samples, len(y_real)), replace=False)
+
+    for idx in indices:
+        real = y_real.iloc[idx] if hasattr(y_real, 'iloc') else y_real[idx]
+        pred = y_pred[idx]
+        diff = pred - real
+        pct = abs(diff) / real * 100
+        print(f"  ${real:>13,.0f} | ${pred:>13,.0f} | ${diff:>13,.0f} | {pct:>6.1f}%")
 
 
 def get_feature_importance(
@@ -145,31 +148,6 @@ def get_feature_importance(
         print(f"  {row['feature']:20s} | {row['importance']:6.0f} | {bar}")
 
     return importance
-
-
-def analyze_predictions(
-    model: lgb.LGBMRegressor,
-    X_test: pd.DataFrame,
-    y_test: pd.Series,
-    n_samples: int = 10,
-):
-    """Muestra ejemplos de predicciones vs valores reales."""
-    y_pred = model.predict(X_test)
-
-    print("\n" + "=" * 60)
-    print(f"EJEMPLOS DE PREDICCIONES (primeras {n_samples})")
-    print("=" * 60)
-    print(f"  {'Real':>15s} | {'Predicho':>15s} | {'Diferencia':>15s} | {'Error %':>8s}")
-    print("  " + "-" * 62)
-
-    indices = np.random.RandomState(42).choice(len(y_test), size=min(n_samples, len(y_test)), replace=False)
-
-    for idx in indices:
-        real = y_test.iloc[idx]
-        pred = y_pred[idx]
-        diff = pred - real
-        pct = abs(diff) / real * 100
-        print(f"  ${real:>13,.0f} | ${pred:>13,.0f} | ${diff:>13,.0f} | {pct:>6.1f}%")
 
 
 def save_model(model: lgb.LGBMRegressor):
@@ -195,22 +173,28 @@ def run_training_pipeline():
     # 2. Preparar features
     X, y = prepare_features(df)
 
-    # 3. Split
-    X_train, X_test, y_train, y_test = split_data(X, y)
+    # 3. Transformar target a log (precios tienen distribución log-normal)
+    y_log = np.log1p(y)
 
-    # 4. Entrenar
-    model = train_model(X_train, y_train, X_test, y_test)
+    # 4. Split
+    X_train, X_test, y_train_log, y_test_log = split_data(X, y_log)
 
-    # 5. Evaluar
-    metrics = evaluate_model(model, X_test, y_test)
+    # 5. Entrenar (en escala log)
+    model = train_model(X_train, y_train_log, X_test, y_test_log)
 
-    # 6. Feature importance
+    # 6. Evaluar (reconvertir a escala original para métricas interpretables)
+    y_pred_log = model.predict(X_test)
+    y_pred = np.expm1(y_pred_log)
+    y_test_real = np.expm1(y_test_log)
+    metrics = evaluate_model_from_predictions(y_test_real, y_pred)
+
+    # 7. Feature importance
     importance = get_feature_importance(model, list(X.columns))
 
-    # 7. Ejemplos de predicciones
-    analyze_predictions(model, X_test, y_test)
+    # 8. Ejemplos de predicciones
+    analyze_predictions_from_arrays(y_test_real, y_pred)
 
-    # 8. Guardar modelo y artefactos
+    # 9. Guardar modelo y artefactos
     save_model(model)
     save_encoders(encoders, list(X.columns))
 

@@ -1,0 +1,8 @@
+ml_raw_detalle.csv
+data/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+venv/
+.venv/
