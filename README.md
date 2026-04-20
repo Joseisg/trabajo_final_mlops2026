@@ -13,7 +13,7 @@ El mercado de autos usados presenta alta asimetria de informacion: compradores y
 
 - **Modelo**: LightGBM (Regresion)
 - **API**: FastAPI + Uvicorn
-- **Deploy**: GCP Cloud Run
+- **Deploy**: Google Cloud Run (Docker)
 - **Lenguaje**: Python 3.10
 
 ## Estructura del Proyecto
@@ -37,6 +37,8 @@ trabajo_final_mlops2026/
 ├── runtime.txt              # Version de Python
 ├── Procfile                 # Comando de inicio para deploy
 ├── Dockerfile               # Para deploy con Docker
+├── cloudbuild.yaml          # Pipeline de Cloud Build (CI/CD)
+├── deploy.sh                # Script de deploy manual a Cloud Run
 └── README.md
 ```
 
@@ -137,9 +139,39 @@ curl -X POST http://localhost:8000/opportunity \
 
 ## Plataforma Cloud
 
-**Deploy en:** GCP Cloud Run
+**Deploy en:** Google Cloud Run (region `southamerica-west1`)
 
-**URL Publica:** [Se actualizara despues del deploy]
+**URL Publica:** https://trabajo-final-mlops2026-git-oaftrgz4ta-tl.a.run.app
+
+**Documentacion Swagger:** https://trabajo-final-mlops2026-git-oaftrgz4ta-tl.a.run.app/docs
+
+### Endpoints disponibles en produccion
+
+- `GET  /health`       → verifica estado del modelo
+- `POST /predict`      → prediccion de precio
+- `POST /opportunity`  → evaluacion de oportunidad de compra
+- `GET  /docs`         → documentacion interactiva Swagger UI
+
+### Ejemplo de request a la API LIVE
+
+```bash
+curl -X POST https://trabajo-final-mlops2026-git-oaftrgz4ta-tl.a.run.app/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "marca": "Toyota",
+    "modelo": "Corolla",
+    "año": 2019,
+    "kilometraje": 45000,
+    "tipo_de_combustible": "Bencina",
+    "transmision": "Automática",
+    "tipo_de_carroceria": "Sedán"
+  }'
+```
+
+**Respuesta real:**
+```json
+{"precio_estimado":12835555,"rango_bajo":11551999,"rango_alto":14119110,"moneda":"CLP"}
+```
 
 ## Metricas del Modelo
 
