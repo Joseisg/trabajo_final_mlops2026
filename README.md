@@ -54,7 +54,7 @@ pip install -r requirements.txt
 ```
 
 ### 3. Entrenar el modelo (si no existe model.pkl)
-```bash
+```bashßß
 python train.py
 ```
 
@@ -157,6 +157,6 @@ Se eligio **LightGBM** por su excelente rendimiento en datos tabulares con varia
 
 ## Autores
 
-- Jose Inostroza
+- Jose Ignacio Sanhueza
 - Sergio Meneses
-- [Completar nombres del grupo]
+- Vicente Yañez
