@@ -141,9 +141,9 @@ curl -X POST http://localhost:8000/opportunity \
 
 **Deploy en:** Google Cloud Run (region `southamerica-west1`)
 
-**URL Publica:** https://trabajo-final-mlops2026-git-oaftrgz4ta-tl.a.run.app
+**URL Publica:** https://trabajo-final-mlops2026-git-565403120349.southamerica-west1.run.app
 
-**Documentacion Swagger:** https://trabajo-final-mlops2026-git-oaftrgz4ta-tl.a.run.app/docs
+**Documentacion Swagger:** https://trabajo-final-mlops2026-git-565403120349.southamerica-west1.run.app/docs
 
 ### Endpoints disponibles en produccion
 
@@ -155,7 +155,7 @@ curl -X POST http://localhost:8000/opportunity \
 ### Ejemplo de request a la API LIVE
 
 ```bash
-curl -X POST https://trabajo-final-mlops2026-git-oaftrgz4ta-tl.a.run.app/predict \
+curl -X POST https://trabajo-final-mlops2026-git-565403120349.southamerica-west1.run.app/predict \
   -H "Content-Type: application/json" \
   -d '{
     "marca": "Toyota",
