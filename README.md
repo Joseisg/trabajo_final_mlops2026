@@ -13,7 +13,7 @@ El mercado de autos usados presenta alta asimetria de informacion: compradores y
 
 - **Modelo**: LightGBM (Regresion)
 - **API**: FastAPI + Uvicorn
-- **Deploy**: Render
+- **Deploy**: GCP Cloud Run
 - **Lenguaje**: Python 3.10
 
 ## Estructura del Proyecto
@@ -54,7 +54,7 @@ pip install -r requirements.txt
 ```
 
 ### 3. Entrenar el modelo (si no existe model.pkl)
-```bashßß
+```bash
 python train.py
 ```
 
@@ -137,7 +137,7 @@ curl -X POST http://localhost:8000/opportunity \
 
 ## Plataforma Cloud
 
-**Deploy en:** Render
+**Deploy en:** GCP Cloud Run
 
 **URL Publica:** [Se actualizara despues del deploy]
 
